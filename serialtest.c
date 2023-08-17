@@ -42,9 +42,9 @@ int run_test(int fd)
     }
     printf("Press q or ^D to exit\n");
 
-    pfds[1].events |= POLLOUT | POLLWRBAND;
+    pfds[1].events |= POLLOUT;
 
-    while(1) {
+    while (1) {
         ret = poll(pfds, nfds, -1);
         if (ret < 0) {
             rc = 1;
