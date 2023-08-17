@@ -101,11 +101,11 @@ test_exit:
 
 void reset_input_mode(int status, void * tio)
 {
-# if defined TCSETS2
+#if defined TCSETS2
     ioctl(STDIN_FILENO, TCSETS2, tio);
-# else
+#else
     ioctl(STDIN_FILENO, TCSETS, tio);
-# endif
+#endif
 }
 
 int main(int argc, char *argv[])
