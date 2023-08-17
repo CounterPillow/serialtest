@@ -12,6 +12,7 @@
 
 static unsigned long long num_read = 0;
 static unsigned long long num_written = 0;
+static unsigned long long num_errs = 0;
 
 int run_test(int fd)
 {
@@ -23,11 +24,23 @@ int run_test(int fd)
     int prev_rd = -1;
     uint8_t stdin_rd = 0;
     int rc = 0;
+    int avail_r = -1;
+    int avail_w = -1;
 
     pfds = calloc(nfds, sizeof(struct pollfd));
     if (pfds == NULL) {
         perror("malloc");
         return 1;
+    }
+
+    /* Empty buffers */
+    ioctl(fd, TCFLSH, TCIOFLUSH);
+
+    while (avail_r != 0 || avail_w != 0) {
+        ioctl(fd, FIONREAD, &avail_r);
+        ioctl(fd, TIOCOUTQ, &avail_w);
+        printf("avail r = %d, w = %d\n", avail_r, avail_w);
+        usleep(100);
     }
 
     pfds[0].fd = STDIN_FILENO;
@@ -69,8 +82,8 @@ int run_test(int fd)
                 //printf("<");
                 if (prev_rd != -1) {
                     if ((prev_rd + 1) % 256 != rd) {
-                        rc = 2;
-                        goto test_exit;
+                        printf("Expected %d, got %d\n", (prev_rd + 1) % 256, rd);
+                        num_errs++;
                     }
                 }
                 prev_rd = rd;
@@ -222,14 +235,12 @@ int main(int argc, char *argv[])
 
     rc = run_test(fd);
     if (rc != 0) {
-        if (rc == 2)
-            printf("Error found in data stream\n");
         goto err;
     }
 
     printf("\n");
-    printf("No errors encountered, read %llu bytes, wrote %llu bytes\n",
-           num_read, num_written);
+    printf("read %llu bytes, wrote %llu bytes, encountered %llu errors (%f percent)\n",
+           num_read, num_written, num_errs, (double) num_errs / (double) num_read * 100.0);
 
     close(fd);
     exit(EXIT_SUCCESS);
