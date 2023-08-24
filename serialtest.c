@@ -30,6 +30,14 @@ void flush_serial(int fd)
     }
 }
 
+void fill_buf(uint8_t start_value, size_t len, uint8_t* buf)
+{
+    uint8_t counter = start_value;
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = counter++;
+    }
+}
+
 int run_test(int fd)
 {
     nfds_t nfds = 2;
@@ -43,6 +51,7 @@ int run_test(int fd)
     int rc = 0;
     int expected = -1;
     uint8_t* read_buf;
+    uint8_t* write_buf;
 
     pfds = calloc(nfds, sizeof(struct pollfd));
     if (pfds == NULL) {
@@ -60,6 +69,13 @@ int run_test(int fd)
         perror("malloc");
         rc = 1;
         goto free_pfds;
+    }
+
+    write_buf = (uint8_t*) malloc(SERIALTEST_BUFSIZE);
+    if (write_buf == NULL) {
+        perror("malloc");
+        rc = 1;
+        goto free_read_buf;
     }
 
     flush_serial(fd);
@@ -118,13 +134,14 @@ int run_test(int fd)
             }
         }
         if (pfds[1].revents & POLLOUT) {
+            fill_buf(counter, SERIALTEST_BUFSIZE, write_buf);
             //printf("writing serial\n");
-            ret = write(fd, &counter, 1);
-            if (ret == 1) {
+            ret = write(fd, write_buf, SERIALTEST_BUFSIZE);
+            if (ret > 0) {
                 //printf(">");
                 //fflush(stdout);
-                counter++;
-                num_written++;
+                counter += ret;
+                num_written += ret;
             } else if (ret < 0 && errno != EAGAIN) {
                 perror("write");
                 rc = 3;
@@ -136,6 +153,8 @@ int run_test(int fd)
     }
 
 test_exit:
+    free(write_buf);
+free_read_buf:
     free(read_buf);
 free_pfds:
     free(pfds);
