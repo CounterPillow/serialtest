@@ -14,6 +14,20 @@ static unsigned long long num_read = 0;
 static unsigned long long num_written = 0;
 static unsigned long long num_errs = 0;
 
+void flush_serial(int fd)
+{
+    int avail_r = -1;
+    int avail_w = -1;
+    /* Empty buffers */
+    ioctl(fd, TCFLSH, TCIOFLUSH);
+
+    while (avail_r != 0 || avail_w != 0) {
+        ioctl(fd, FIONREAD, &avail_r);
+        ioctl(fd, TIOCOUTQ, &avail_w);
+        usleep(100);
+    }
+}
+
 int run_test(int fd)
 {
     nfds_t nfds = 2;
@@ -24,8 +38,6 @@ int run_test(int fd)
     int prev_rd = -1;
     uint8_t stdin_rd = 0;
     int rc = 0;
-    int avail_r = -1;
-    int avail_w = -1;
     int expected = -1;
 
     pfds = calloc(nfds, sizeof(struct pollfd));
@@ -34,20 +46,12 @@ int run_test(int fd)
         return 1;
     }
 
-    /* Empty buffers */
-    ioctl(fd, TCFLSH, TCIOFLUSH);
-
-    while (avail_r != 0 || avail_w != 0) {
-        ioctl(fd, FIONREAD, &avail_r);
-        ioctl(fd, TIOCOUTQ, &avail_w);
-        printf("avail r = %d, w = %d\n", avail_r, avail_w);
-        usleep(100);
-    }
-
     pfds[0].fd = STDIN_FILENO;
     pfds[0].events = POLLIN | POLLHUP;
     pfds[1].fd = fd;
     pfds[1].events = POLLIN;
+
+    flush_serial(fd);
 
     ret = poll(pfds, nfds, -1);
     if (ret < 0) {
