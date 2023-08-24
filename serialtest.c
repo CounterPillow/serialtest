@@ -10,7 +10,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#define SERIALTEST_BUFSIZE 255
+#define SERIALTEST_BUFSIZE 1024
 
 static unsigned long long num_read = 0;
 static unsigned long long num_written = 0;
