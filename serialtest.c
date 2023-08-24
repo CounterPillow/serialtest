@@ -26,6 +26,7 @@ int run_test(int fd)
     int rc = 0;
     int avail_r = -1;
     int avail_w = -1;
+    int expected = -1;
 
     pfds = calloc(nfds, sizeof(struct pollfd));
     if (pfds == NULL) {
@@ -81,9 +82,16 @@ int run_test(int fd)
                 num_read++;
                 //printf("<");
                 if (prev_rd != -1) {
-                    if ((prev_rd + 1) % 256 != rd) {
-                        printf("Expected %d, got %d\n", (prev_rd + 1) % 256, rd);
+                    expected = (prev_rd + 1) % 256;
+                    if (expected != rd) {
+                        printf("Expected %d, got %d", expected, rd);
                         num_errs++;
+                        if (expected + 1 == rd) {
+                            printf(" (dropped byte?)");
+                        } else if (__builtin_popcount(expected ^ rd) == 1) {
+                            printf(" (single bitflip?)");
+                        }
+                        printf("\n");
                     }
                 }
                 prev_rd = rd;
