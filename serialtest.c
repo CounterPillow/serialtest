@@ -10,6 +10,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#define SERIALTEST_BUFSIZE 255
+
 static unsigned long long num_read = 0;
 static unsigned long long num_written = 0;
 static unsigned long long num_errs = 0;
@@ -35,10 +37,12 @@ int run_test(int fd)
     uint8_t counter = 0;
     int ret;
     uint8_t rd;
+    int num_rd;
     int prev_rd = -1;
     uint8_t stdin_rd = 0;
     int rc = 0;
     int expected = -1;
+    uint8_t* read_buf;
 
     pfds = calloc(nfds, sizeof(struct pollfd));
     if (pfds == NULL) {
@@ -50,6 +54,13 @@ int run_test(int fd)
     pfds[0].events = POLLIN | POLLHUP;
     pfds[1].fd = fd;
     pfds[1].events = POLLIN;
+
+    read_buf = (uint8_t*) malloc(SERIALTEST_BUFSIZE);
+    if (read_buf == NULL) {
+        perror("malloc");
+        rc = 1;
+        goto free_pfds;
+    }
 
     flush_serial(fd);
 
@@ -82,23 +93,28 @@ int run_test(int fd)
         }
         if (pfds[1].revents & POLLIN) {
             //printf("reading serial\n");
-            if (read(fd, &rd, 1) > 0) {
-                num_read++;
-                //printf("<");
-                if (prev_rd != -1) {
-                    expected = (prev_rd + 1) % 256;
-                    if (expected != rd) {
-                        printf("Expected %d, got %d", expected, rd);
-                        num_errs++;
-                        if (expected + 1 == rd) {
-                            printf(" (dropped byte?)");
-                        } else if (__builtin_popcount(expected ^ rd) == 1) {
-                            printf(" (single bitflip?)");
+            num_rd = read(fd, read_buf, SERIALTEST_BUFSIZE);
+            //printf("read %d bytes\n", num_rd);
+            if (num_rd > 0) {
+                num_read += num_rd;
+                for (int i = 0; i < num_rd; i++) {
+                    rd = read_buf[i];
+                    //printf("<");
+                    if (prev_rd != -1) {
+                        expected = (prev_rd + 1) % 256;
+                        if (expected != rd) {
+                            printf("Expected %d, got %d", expected, rd);
+                            num_errs++;
+                            if (expected + 1 == rd) {
+                                printf(" (dropped byte?)");
+                            } else if (__builtin_popcount(expected ^ rd) == 1) {
+                                printf(" (single bitflip?)");
+                            }
+                            printf("\n");
                         }
-                        printf("\n");
                     }
+                    prev_rd = rd;
                 }
-                prev_rd = rd;
             }
         }
         if (pfds[1].revents & POLLOUT) {
@@ -120,6 +136,8 @@ int run_test(int fd)
     }
 
 test_exit:
+    free(read_buf);
+free_pfds:
     free(pfds);
     return rc;
 }
@@ -178,8 +196,14 @@ int main(int argc, char *argv[])
     tio.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
     tio.c_cflag &= ~(CSIZE | PARENB);
     tio.c_cflag |= CS8;
-    tio.c_cc[VMIN]  = 1;
-    tio.c_cc[VTIME] = 0;
+    /* 0.1 second max read */
+    /*
+    tio.c_cc[VMIN]  = 0;
+    tio.c_cc[VTIME] = 1;
+    */
+    /* max amount we could read, in practice is seemingly always 64 bytes */
+    tio.c_cc[VMIN]  = 255;
+    tio.c_cc[VTIME] = 1;
 
     /* Clear the current output baud rate and fill a new value */
     tio.c_cflag &= ~CBAUD;
